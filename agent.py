@@ -1,4 +1,4 @@
-name: Gunluk Borsa Özeti
+name: Gunluk Borsa Ozeti
 
 on:
   schedule:
