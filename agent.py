@@ -1,12 +1,14 @@
 import os
 import json
+import time
 import urllib.request
 import urllib.parse
+import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
 KEY = os.environ["GEMINI_API_KEY"]
-MODEL = "gemini-3.8-flash"
+MODELLER = ["gemini-3.8-flash", "gemini-3.6-flash"]
 
 # (bölüm adı, arama sorgusu, dil, ülke, ceid)
 SORGULAR = [
@@ -33,16 +35,33 @@ def haberler(q, hl, gl, ceid, n=8):
 
 
 def gemini(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
-    )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        d = json.load(r)
-    return d["candidates"][0]["content"]["parts"][0]["text"]
+    son_hata = None
+    for model in MODELLER:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for deneme in range(1, 4):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=body,
+                    headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
+                )
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    d = json.load(r)
+                return d["candidates"][0]["content"]["parts"][0]["text"]
+            except urllib.error.HTTPError as e:
+                detay = e.read().decode("utf-8", "ignore")[:300]
+                print(f"{model} deneme {deneme}: HTTP {e.code} {detay}")
+                son_hata = e
+                if e.code in (429, 500, 503, 504):
+                    time.sleep(20 * deneme)
+                    continue
+                break  # bu model işe yaramıyor, diğerine geç
+            except Exception as e:
+                print(f"{model} deneme {deneme}: {e}")
+                son_hata = e
+                time.sleep(10)
+    raise RuntimeError(f"Gemini yanıt vermedi: {son_hata}")
 
 
 def main():
